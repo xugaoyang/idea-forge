@@ -1,0 +1,113 @@
+---
+description: IdeaForge React 页面与组件编写规范
+globs: src/**/*.tsx
+alwaysApply: false
+---
+
+# React 页面与组件规范
+
+## 页面组件结构
+
+每个页面组件按以下顺序组织：
+
+```tsx
+// 1. 导入（第三方 → 内部 store → 内部组件 → 类型）
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useIdeaStore } from '../store/ideaStore'
+import type { Idea } from '../types'
+
+// 2. 局部子组件（只在本页用的小组件，放在页面组件之前）
+function SectionCard({ ... }) { ... }
+
+// 3. 页面主组件（export function，非 default export）
+export function XxxPage() {
+  // 3a. store / router hooks
+  // 3b. 本地 state（loading, error, 表单字段）
+  // 3c. 派生数据（filtered, computed）
+  // 3d. 事件处理函数
+  // 3e. JSX return
+}
+```
+
+## AI 调用模式（统一三态）
+
+```tsx
+const [loading, setLoading] = useState(false)
+const [error, setError] = useState<string | null>(null)
+
+async function handleGenerate() {
+  setLoading(true)
+  setError(null)
+  try {
+    const result = await aiService.someMethod(idea)
+    updateIdea(idea.id, { someField: result })
+  } catch (e) {
+    setError(e instanceof Error ? e.message : '生成失败，请重试')
+  } finally {
+    setLoading(false)
+  }
+}
+```
+
+## 弹窗 / Modal 规范
+
+```tsx
+// 遮罩层统一写法
+<div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+  <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl">
+    {/* 头部 */}
+    <div className="p-6 border-b border-slate-800">...</div>
+    {/* 内容 */}
+    <div className="p-6 space-y-4">...</div>
+    {/* 操作 */}
+    <div className="p-6 pt-0 flex gap-3">
+      <button className="flex-1 ... border border-slate-700">取消</button>
+      <button className="flex-1 ... bg-brand-600">确认</button>
+    </div>
+  </div>
+</div>
+```
+
+## 按钮变体约定
+
+```tsx
+// 主要操作
+className="bg-brand-600 hover:bg-brand-500 text-white px-4 py-2.5 rounded-xl font-medium transition-colors"
+
+// 次要/幽灵
+className="border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600 rounded-lg px-4 py-2.5 transition-colors"
+
+// 危险操作
+className="bg-red-700 hover:bg-red-600 text-white rounded-lg px-4 py-2 font-medium transition-colors"
+
+// 禁用态：追加 disabled:bg-slate-700 disabled:text-slate-500
+```
+
+## 卡片规范
+
+```tsx
+// 标准内容卡片
+<div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+  <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-4">
+    区块标题
+  </h3>
+  ...
+</div>
+
+// 可点击卡片（hover 效果）
+<div className="group bg-slate-900 border border-slate-800 hover:border-brand-700/60 hover:bg-slate-800/80 rounded-xl p-5 transition-all cursor-pointer">
+```
+
+## 四步进度条（详情页）
+
+新增页面功能后，同步更新 `IdeaDetailPage.tsx` 中的 `steps` 数组：
+
+```tsx
+const steps = [
+  { label: '想法记录', icon: <FileText size={14} />, done: true,                  link: null },
+  { label: '产品形态', icon: <Layers size={14} />,   done: !!idea.productShape,   link: `/idea/${id}/shape` },
+  { label: '产品方案', icon: <Sparkles size={14} />, done: !!idea.productPlan,    link: `/idea/${id}/plan` },
+  { label: '生成网页', icon: <Globe size={14} />,    done: !!idea.generatedPage,  link: `/idea/${id}/webpage` },
+]
+```

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, Lightbulb, TrendingUp, CheckCircle, Clock, Sparkles, ArrowRight, Trash2, Filter } from 'lucide-react'
+import { Plus, Search, Lightbulb, TrendingUp, CheckCircle, Clock, Sparkles, ArrowRight, Trash2, Filter, ChevronDown, Globe } from 'lucide-react'
 import { useIdeaStore } from '../store/ideaStore'
 import { StatusBadge, PriorityBadge, TagBadge } from '../components/ui/Badge'
 import type { IdeaStatus, Priority } from '../types'
@@ -66,6 +66,7 @@ export function HomePage() {
   const [filterStatus, setFilterStatus] = useState<IdeaStatus | 'all'>('all')
   const [filterPriority, setFilterPriority] = useState<Priority | 'all'>('all')
   const [showAddModal, setShowAddModal] = useState(false)
+  const [quickMode, setQuickMode] = useState(true)
   const [newIdea, setNewIdea] = useState({ title: '', description: '', problem: '', tags: '', priority: 'medium' as Priority })
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
@@ -92,6 +93,7 @@ export function HomePage() {
       notes: '',
     })
     setShowAddModal(false)
+    setQuickMode(true)
     setNewIdea({ title: '', description: '', problem: '', tags: '', priority: 'medium' })
     navigate(`/idea/${id}`)
   }
@@ -228,11 +230,10 @@ export function HomePage() {
                 </span>
               </div>
 
-              {idea.productPlan && (
-                <div className="absolute bottom-3 left-3">
-                  <Sparkles size={12} className="text-amber-400" />
-                </div>
-              )}
+              <div className="absolute bottom-3 left-3 flex gap-1.5">
+                {idea.productPlan && <Sparkles size={12} className="text-amber-400" />}
+                {idea.generatedPage && <Globe size={12} className="text-brand-400" />}
+              </div>
             </div>
           ))}
         </div>
@@ -241,76 +242,89 @@ export function HomePage() {
       {showAddModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl">
-            <div className="p-6 border-b border-slate-800">
+            <div className="p-6 border-b border-slate-800 flex items-center justify-between">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 <Lightbulb size={20} className="text-brand-400" />
                 记录新想法
               </h2>
+              <button
+                onClick={() => setQuickMode(!quickMode)}
+                className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                {quickMode ? '展开详情' : '收起详情'}
+                <ChevronDown size={13} className={`transition-transform ${quickMode ? '' : 'rotate-180'}`} />
+              </button>
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                  想法标题 <span className="text-red-400">*</span>
-                </label>
-                <input
+                <textarea
                   autoFocus
-                  type="text"
-                  placeholder="用一句话描述你的想法..."
+                  placeholder="描述你的想法，一句话即可..."
                   value={newIdea.title}
                   onChange={(e) => setNewIdea({ ...newIdea, title: e.target.value })}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 transition-colors"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAdd() }
+                  }}
+                  rows={quickMode ? 3 : 2}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 transition-colors resize-none leading-relaxed"
                 />
+                {quickMode && (
+                  <p className="text-xs text-slate-600 mt-1.5 text-right">Enter 快速保存 · Shift+Enter 换行</p>
+                )}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">详细描述</label>
-                <textarea
-                  placeholder="这个产品/工具是做什么的？解决什么问题？"
-                  value={newIdea.description}
-                  onChange={(e) => setNewIdea({ ...newIdea, description: e.target.value })}
-                  rows={3}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 transition-colors resize-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">解决的核心痛点</label>
-                <input
-                  type="text"
-                  placeholder="用户面临什么问题？现有方案有什么不足？"
-                  value={newIdea.problem}
-                  onChange={(e) => setNewIdea({ ...newIdea, problem: e.target.value })}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 transition-colors"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1.5">标签</label>
-                  <input
-                    type="text"
-                    placeholder="AI, 效率, 工具..."
-                    value={newIdea.tags}
-                    onChange={(e) => setNewIdea({ ...newIdea, tags: e.target.value })}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 transition-colors"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1.5">优先级</label>
-                  <select
-                    value={newIdea.priority}
-                    onChange={(e) => setNewIdea({ ...newIdea, priority: e.target.value as Priority })}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:border-brand-500 cursor-pointer"
-                  >
-                    <option value="low">低优先级</option>
-                    <option value="medium">中优先级</option>
-                    <option value="high">高优先级</option>
-                    <option value="critical">紧急</option>
-                  </select>
-                </div>
-              </div>
+              {!quickMode && (
+                <>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">详细描述</label>
+                    <textarea
+                      placeholder="这个产品/工具是做什么的？解决什么问题？"
+                      value={newIdea.description}
+                      onChange={(e) => setNewIdea({ ...newIdea, description: e.target.value })}
+                      rows={2}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 transition-colors resize-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">核心痛点</label>
+                    <input
+                      type="text"
+                      placeholder="用户面临什么问题？现有方案有什么不足？"
+                      value={newIdea.problem}
+                      onChange={(e) => setNewIdea({ ...newIdea, problem: e.target.value })}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 transition-colors"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">标签</label>
+                      <input
+                        type="text"
+                        placeholder="AI, 效率, 工具..."
+                        value={newIdea.tags}
+                        onChange={(e) => setNewIdea({ ...newIdea, tags: e.target.value })}
+                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1.5">优先级</label>
+                      <select
+                        value={newIdea.priority}
+                        onChange={(e) => setNewIdea({ ...newIdea, priority: e.target.value as Priority })}
+                        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-slate-300 focus:outline-none focus:border-brand-500 cursor-pointer"
+                      >
+                        <option value="low">低优先级</option>
+                        <option value="medium">中优先级</option>
+                        <option value="high">高优先级</option>
+                        <option value="critical">紧急</option>
+                      </select>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
             <div className="p-6 pt-0 flex gap-3">
               <button
-                onClick={() => setShowAddModal(false)}
+                onClick={() => { setShowAddModal(false); setQuickMode(true); setNewIdea({ title: '', description: '', problem: '', tags: '', priority: 'medium' }) }}
                 className="flex-1 px-4 py-2.5 rounded-lg border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600 text-sm font-medium transition-colors"
               >
                 取消
@@ -320,7 +334,7 @@ export function HomePage() {
                 disabled={!newIdea.title.trim()}
                 className="flex-1 px-4 py-2.5 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:bg-slate-700 disabled:text-slate-500 text-white text-sm font-medium transition-colors"
               >
-                保存并分析
+                记录想法
               </button>
             </div>
           </div>

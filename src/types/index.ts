@@ -53,6 +53,18 @@ export interface ProductPlan {
   successMetrics: string[]
 }
 
+export interface GeneratedPage {
+  html: string
+  generatedAt: string
+  version: number
+}
+
+export interface IdeaExpansion {
+  description: string
+  problem: string
+  tags: string[]
+}
+
 export interface Idea {
   id: string
   title: string
@@ -63,6 +75,7 @@ export interface Idea {
   priority: Priority
   productShape?: ProductShape
   productPlan?: ProductPlan
+  generatedPage?: GeneratedPage
   createdAt: string
   updatedAt: string
   notes: string

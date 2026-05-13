@@ -1,0 +1,97 @@
+---
+description: IdeaForge Store 扩展规范与 aiService 新增方法规范
+globs: src/store/**,src/services/**,src/types/**
+alwaysApply: false
+---
+
+# Store & AI Service 扩展规范
+
+## ideaStore 扩展规则
+
+新增 action 时遵循以下模式（参考现有 `setProductShape` / `setProductPlan`）：
+
+```typescript
+// ✅ 正确：更新时自动写 updatedAt，状态联动用 idea.status 条件判断
+setGeneratedPage: (id, page) => {
+  set((state) => ({
+    ideas: state.ideas.map((idea) =>
+      idea.id === id
+        ? { ...idea, generatedPage: page, updatedAt: new Date().toISOString() }
+        : idea
+    ),
+  }))
+},
+
+// ❌ 错误：直接 mutate，或忘记更新 updatedAt
+ideas.find(i => i.id === id).generatedPage = page
+```
+
+**接口声明同步原则**：
+- `src/types/index.ts` 新增字段 → `IdeaStore` 接口同步新增 action → `create()` 内实现
+- 涉及 `Idea` 的新增字段必须设为可选（`?`），保证旧数据向前兼容
+
+## types/index.ts 扩展规则
+
+```typescript
+// ✅ 新字段一律可选，防止旧 localStorage 数据反序列化失败
+export interface Idea {
+  // ...现有字段
+  generatedPage?: GeneratedPage   // 新增示例
+}
+
+// ✅ 新增独立类型放在 Idea 接口之前
+export interface GeneratedPage {
+  html: string
+  generatedAt: string
+  version: number
+}
+```
+
+## aiService 新增方法规范
+
+每个新 AI 功能固定四段结构：
+
+```typescript
+// ① System Prompt 常量（全大写 SNAKE_CASE，放在方法之前）
+const EXPAND_IDEA_SYSTEM_PROMPT = `...严格输出 JSON，不添加额外文字...`
+
+// ② 核心 async 函数（ai 前缀，参数含 settings）
+export async function aiExpandIdea(idea: Idea, settings: AISettings): Promise<ExpandedIdea> {
+  const userPrompt = `...`
+  try {
+    const raw = await callLLM(settings, EXPAND_IDEA_SYSTEM_PROMPT, userPrompt)
+    const parsed = JSON.parse(raw) as ExpandedIdea
+    if (!parsed.description) throw new Error('返回数据格式不完整')
+    return parsed
+  } catch (e) {
+    if ((e as Error).message?.includes('API 调用失败')) throw e
+    throw new Error(`AI 返回格式解析失败：${(e as Error).message}`)
+  }
+}
+
+// ③ 统一入口函数（无 ai 前缀，含规则引擎降级）
+export async function expandIdea(idea: Idea, settings: AISettings | null): Promise<ExpandedIdea> {
+  if (settings && settings.apiKey.trim()) {
+    return aiExpandIdea(idea, settings)
+  }
+  return ruleBasedExpand(idea)  // 规则引擎兜底
+}
+```
+
+**Prompt 设计要求**：
+- 末尾必须注明：`严格按照 JSON 格式返回，不要添加任何额外文字`
+- 所有枚举字段在 Prompt 中列出合法值（避免 AI 自由发挥导致解析失败）
+- 返回 HTML 的 Prompt 例外，不加 `response_format: json_object`，需在 `callLLM` 里单独处理
+
+## 生成 HTML 的特殊处理
+
+网页代码生成不使用 JSON 格式，需单独封装 `callLLMRaw`（去掉 `response_format`）：
+
+```typescript
+async function callLLMRaw(settings: AISettings, systemPrompt: string, userPrompt: string): Promise<string> {
+  // 与 callLLM 相同，但 body 中不包含 response_format
+  const body = { model, temperature, messages }  // 无 response_format
+  ...
+  return data.choices[0].message.content  // 直接返回原始字符串
+}
+```

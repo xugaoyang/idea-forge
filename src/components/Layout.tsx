@@ -1,6 +1,9 @@
 import { Link, useLocation } from 'react-router-dom'
-import { Lightbulb, Layers, Settings, CheckCircle } from 'lucide-react'
+import { Lightbulb, Layers, Settings, CheckCircle, LogOut, Cloud, CloudOff, Loader2 } from 'lucide-react'
 import { useSettingsStore } from '../store/settingsStore'
+import { useAuthStore } from '../store/authStore'
+import { useIdeaStore } from '../store/ideaStore'
+import { isSupabaseConfigured } from '../lib/supabase'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -9,6 +12,38 @@ interface LayoutProps {
 export function Layout({ children }: LayoutProps) {
   const location = useLocation()
   const { isConfigured } = useSettingsStore()
+  const { user, signOut } = useAuthStore()
+  const { syncStatus, lastSyncedAt } = useIdeaStore()
+
+  const supabaseReady = isSupabaseConfigured()
+
+  const SyncIndicator = () => {
+    if (!supabaseReady || !user) return null
+    if (syncStatus === 'syncing') {
+      return (
+        <span className="flex items-center gap-1 text-xs text-slate-500">
+          <Loader2 size={11} className="animate-spin" />
+          <span className="hidden sm:block">同步中</span>
+        </span>
+      )
+    }
+    if (syncStatus === 'error') {
+      return (
+        <span title="同步失败" className="flex items-center gap-1 text-xs text-red-500">
+          <CloudOff size={13} />
+        </span>
+      )
+    }
+    return (
+      <span
+        title={lastSyncedAt ? `上次同步：${new Date(lastSyncedAt).toLocaleTimeString('zh-CN')}` : '已连接云端'}
+        className="flex items-center gap-1 text-xs text-emerald-500"
+      >
+        <Cloud size={13} />
+        <span className="hidden sm:block">已同步</span>
+      </span>
+    )
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -23,6 +58,8 @@ export function Layout({ children }: LayoutProps) {
           </Link>
 
           <nav className="flex items-center gap-1">
+            <SyncIndicator />
+
             <Link
               to="/"
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
@@ -34,6 +71,7 @@ export function Layout({ children }: LayoutProps) {
               <Lightbulb size={15} />
               <span className="hidden sm:block">我的想法</span>
             </Link>
+
             <Link
               to="/settings"
               title="AI 设置"
@@ -48,6 +86,24 @@ export function Layout({ children }: LayoutProps) {
                 <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400 border border-[#0f1117]" />
               )}
             </Link>
+
+            {user && (
+              <div className="flex items-center gap-1 ml-1 pl-2 border-l border-slate-800">
+                <span
+                  title={user.email}
+                  className="w-7 h-7 rounded-full bg-brand-700 border border-brand-600 flex items-center justify-center text-xs font-semibold text-white cursor-default"
+                >
+                  {user.email?.[0].toUpperCase() ?? 'U'}
+                </span>
+                <button
+                  onClick={signOut}
+                  title="退出登录"
+                  className="p-1.5 text-slate-600 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
+                >
+                  <LogOut size={14} />
+                </button>
+              </div>
+            )}
           </nav>
         </div>
       </header>

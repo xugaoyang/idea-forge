@@ -1,5 +1,5 @@
 import type { AISettings } from '../types/ai'
-import type { Idea, ProductShape, ProductPlan, Feature } from '../types'
+import type { Idea, ProductShape, ProductPlan, Feature, IdeaExpansion, GeneratedPage } from '../types'
 import { PROVIDER_CONFIG } from '../types/ai'
 import { analyzeProductShape as ruleBasedShape, generateProductPlan as ruleBasedPlan } from '../utils/productAnalyzer'
 
@@ -17,6 +17,36 @@ function getModelId(settings: AISettings): string {
     return settings.customModelId || 'gpt-4o'
   }
   return settings.modelId
+}
+
+async function callLLMRaw(settings: AISettings, systemPrompt: string, userPrompt: string): Promise<string> {
+  const endpoint = getEndpoint(settings)
+  const modelId = getModelId(settings)
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${settings.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: modelId,
+      temperature: settings.temperature,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+    }),
+  })
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    const msg = (err as { error?: { message?: string } })?.error?.message || `HTTP ${response.status}`
+    throw new Error(`API 调用失败：${msg}`)
+  }
+
+  const data = await response.json() as { choices: { message: { content: string } }[] }
+  return data.choices[0].message.content
 }
 
 async function callLLM(settings: AISettings, systemPrompt: string, userPrompt: string): Promise<string> {
@@ -179,6 +209,103 @@ export async function aiGenerateProductPlan(idea: Idea, shape: ProductShape, set
   } catch (e) {
     if ((e as Error).message?.includes('API 调用失败')) throw e
     throw new Error(`AI 返回格式解析失败：${(e as Error).message}`)
+  }
+}
+
+// ──────────────────────────────────────────────
+// 想法扩写补全
+// ──────────────────────────────────────────────
+const EXPAND_IDEA_SYSTEM_PROMPT = `你是产品经理助手，擅长将简短的产品想法扩展成清晰的产品描述。
+用户会给你一个简短的产品想法标题，请帮他补全详细信息。
+严格按照以下 JSON 格式返回，不要添加任何额外文字：
+
+{
+  "description": "产品是做什么的，解决什么场景下的问题（2-3句话，具体且有场景感）",
+  "problem": "用户面临的核心痛点，现有方案的不足（1-2句话，具体指出痛点）",
+  "tags": ["标签1", "标签2", "标签3"]
+}
+
+要求：
+- description 要有场景感，不要泛泛而谈
+- problem 要具体，指出现有方案的缺陷
+- tags 给 3-4 个精准标签，如：AI、效率工具、B端、移动端等
+- 所有内容用中文`
+
+async function aiExpandIdea(idea: Idea, settings: AISettings): Promise<IdeaExpansion> {
+  const userPrompt = `产品想法标题：「${idea.title}」`
+  try {
+    const raw = await callLLM(settings, EXPAND_IDEA_SYSTEM_PROMPT, userPrompt)
+    const parsed = JSON.parse(raw) as IdeaExpansion
+    if (!parsed.description) throw new Error('返回数据格式不完整')
+    return parsed
+  } catch (e) {
+    if ((e as Error).message?.includes('API 调用失败')) throw e
+    throw new Error(`AI 返回格式解析失败：${(e as Error).message}`)
+  }
+}
+
+export async function expandIdea(idea: Idea, settings: AISettings | null): Promise<IdeaExpansion> {
+  if (settings && settings.apiKey.trim()) {
+    return aiExpandIdea(idea, settings)
+  }
+  return {
+    description: `${idea.title}是一款旨在解决用户实际痛点的产品工具，通过简洁高效的功能设计，帮助目标用户更好地完成核心任务。`,
+    problem: '现有解决方案存在操作复杂、功能分散等问题，用户需要一个更聚焦、更易用的专属工具。',
+    tags: ['效率工具', '产品设计'],
+  }
+}
+
+// ──────────────────────────────────────────────
+// 网页代码生成
+// ──────────────────────────────────────────────
+const WEBPAGE_SYSTEM_PROMPT = `你是一位专业的前端开发工程师和 UI 设计师，擅长创建现代、美观的落地页。
+请根据产品信息生成一个完整的单文件落地页 HTML。
+
+要求：
+- 输出完整的单文件 HTML，使用 Tailwind CSS CDN（https://cdn.tailwindcss.com）
+- 页面结构包含：导航栏、Hero 区、核心功能介绍（3-4个功能）、使用场景/目标用户、行动号召（CTA）、页脚
+- 现代简洁的设计风格，专业配色，响应式布局
+- 使用语义化 HTML 标签
+- 不使用任何外部 JS 框架，可以用少量原生 JS 实现交互（如移动端导航）
+- 只输出完整 HTML 代码，不要任何说明文字，不要 markdown 代码块标记`
+
+async function aiGenerateWebpage(idea: Idea, settings: AISettings): Promise<string> {
+  const shape = idea.productShape
+  const plan = idea.productPlan
+  const userPrompt = `请为以下产品生成落地页 HTML：
+
+产品名称：${idea.title}
+产品描述：${idea.description || '暂无'}
+核心痛点：${idea.problem || '暂无'}
+${shape ? `产品类型：${shape.type}
+目标用户：${shape.targetUsers}
+价值主张：${shape.valueProposition}
+差异化优势：${shape.differentiators.slice(0, 3).join('、')}` : ''}
+${plan ? `核心功能：${plan.mvpFeatures.slice(0, 4).map(f => `${f.name}（${f.description}）`).join('；')}` : ''}`
+
+  try {
+    const html = await callLLMRaw(settings, WEBPAGE_SYSTEM_PROMPT, userPrompt)
+    const cleaned = html.replace(/^```html?\n?/i, '').replace(/\n?```$/i, '').trim()
+    if (!cleaned.includes('<html') && !cleaned.includes('<!DOCTYPE')) {
+      throw new Error('返回内容不是有效的 HTML')
+    }
+    return cleaned
+  } catch (e) {
+    if ((e as Error).message?.includes('API 调用失败')) throw e
+    throw new Error(`网页生成失败：${(e as Error).message}`)
+  }
+}
+
+export async function generateWebpage(idea: Idea, settings: AISettings | null): Promise<GeneratedPage> {
+  if (!settings || !settings.apiKey.trim()) {
+    throw new Error('生成网页需要配置 AI，请前往设置页面配置 API Key')
+  }
+  const html = await aiGenerateWebpage(idea, settings)
+  const existing = idea.generatedPage
+  return {
+    html,
+    generatedAt: new Date().toISOString(),
+    version: existing ? existing.version + 1 : 1,
   }
 }
 

@@ -2,17 +2,22 @@ import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   ArrowLeft, Edit3, Save, X, Sparkles, Layers, ChevronRight,
-  FileText, Tag, Calendar, CheckSquare, AlertTriangle, Trash2
+  FileText, Tag, Calendar, CheckSquare, AlertTriangle, Trash2,
+  Globe, Wand2, Check, RefreshCw
 } from 'lucide-react'
 import { useIdeaStore } from '../store/ideaStore'
+import { useSettingsStore } from '../store/settingsStore'
+import { expandIdea } from '../services/aiService'
 import { StatusBadge, PriorityBadge, TagBadge } from '../components/ui/Badge'
-import type { IdeaStatus, Priority } from '../types'
+import type { IdeaStatus, Priority, IdeaExpansion } from '../types'
 
 export function IdeaDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { ideas, updateIdea, deleteIdea, updateStatus } = useIdeaStore()
   const idea = ideas.find((i) => i.id === id)
+
+  const { aiSettings, isConfigured } = useSettingsStore()
 
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState(idea ? {
@@ -24,6 +29,10 @@ export function IdeaDetailPage() {
     notes: idea.notes,
   } : null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [expanding, setExpanding] = useState(false)
+  const [expandError, setExpandError] = useState<string | null>(null)
+  const [expandPreview, setExpandPreview] = useState<IdeaExpansion | null>(null)
+  const [expandDismissed, setExpandDismissed] = useState(false)
 
   if (!idea || !form) {
     return (
@@ -55,7 +64,40 @@ export function IdeaDetailPage() {
     { label: '想法记录', icon: <FileText size={14} />, done: true, link: null },
     { label: '产品形态', icon: <Layers size={14} />, done: !!idea.productShape, link: `/idea/${id}/shape` },
     { label: '产品方案', icon: <Sparkles size={14} />, done: !!idea.productPlan, link: `/idea/${id}/plan` },
+    { label: '生成网页', icon: <Globe size={14} />, done: !!idea.generatedPage, link: `/idea/${id}/webpage` },
   ]
+
+  const needsExpansion = !idea.description && !idea.problem && !expandDismissed
+
+  const handleExpand = async () => {
+    setExpanding(true)
+    setExpandError(null)
+    try {
+      const result = await expandIdea(idea, isConfigured() ? aiSettings : null)
+      setExpandPreview(result)
+    } catch (e) {
+      setExpandError(e instanceof Error ? e.message : '扩写失败，请重试')
+    } finally {
+      setExpanding(false)
+    }
+  }
+
+  const handleAcceptExpansion = () => {
+    if (!expandPreview) return
+    updateIdea(idea.id, {
+      description: expandPreview.description,
+      problem: expandPreview.problem,
+      tags: idea.tags.length ? idea.tags : expandPreview.tags,
+    })
+    setForm((f) => f ? {
+      ...f,
+      description: expandPreview.description,
+      problem: expandPreview.problem,
+      tags: idea.tags.length ? f.tags : expandPreview.tags.join(', '),
+    } : f)
+    setExpandPreview(null)
+    setExpandDismissed(true)
+  }
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -125,6 +167,83 @@ export function IdeaDetailPage() {
           ))}
         </div>
       </div>
+
+      {/* AI 扩写引导 */}
+      {needsExpansion && !expandPreview && (
+        <div className="bg-brand-900/20 border border-brand-800/40 rounded-xl p-4 mb-6 flex items-center gap-4">
+          <div className="w-9 h-9 rounded-lg bg-brand-900/50 border border-brand-700/40 flex items-center justify-center shrink-0">
+            <Wand2 size={16} className="text-brand-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-slate-300 font-medium">想法有点简短，需要 AI 帮你补全细节吗？</p>
+            <p className="text-xs text-slate-500 mt-0.5">AI 将根据标题推断描述和痛点，你来确认</p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={() => setExpandDismissed(true)}
+              className="text-xs text-slate-600 hover:text-slate-400 transition-colors px-2 py-1.5"
+            >
+              暂不需要
+            </button>
+            <button
+              onClick={handleExpand}
+              disabled={expanding}
+              className="flex items-center gap-1.5 text-xs bg-brand-600 hover:bg-brand-500 disabled:bg-slate-700 text-white px-3 py-1.5 rounded-lg transition-colors"
+            >
+              {expanding ? <RefreshCw size={12} className="animate-spin" /> : <Wand2 size={12} />}
+              {expanding ? '生成中...' : '帮我补全'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* AI 扩写预览确认 */}
+      {expandPreview && (
+        <div className="bg-slate-900 border border-brand-700/50 rounded-xl overflow-hidden mb-6">
+          <div className="px-5 py-3 border-b border-slate-800 flex items-center gap-2">
+            <Wand2 size={14} className="text-brand-400" />
+            <span className="text-sm font-medium text-white">AI 补全建议</span>
+            <span className="text-xs text-slate-500 ml-1">确认后将填入对应字段</span>
+          </div>
+          <div className="p-5 space-y-4">
+            {expandError && (
+              <p className="text-xs text-red-400 bg-red-900/20 border border-red-800/30 rounded-lg px-3 py-2">{expandError}</p>
+            )}
+            <div>
+              <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">产品描述</p>
+              <p className="text-sm text-slate-300 leading-relaxed">{expandPreview.description}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">核心痛点</p>
+              <p className="text-sm text-slate-300 leading-relaxed">{expandPreview.problem}</p>
+            </div>
+            {!idea.tags.length && (
+              <div>
+                <p className="text-xs text-slate-500 uppercase tracking-wider mb-1.5">推荐标签</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {expandPreview.tags.map(t => (
+                    <span key={t} className="text-xs bg-slate-800 text-slate-300 px-2.5 py-1 rounded-full border border-slate-700">{t}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="px-5 py-3 border-t border-slate-800 flex gap-3">
+            <button
+              onClick={() => { setExpandPreview(null); setExpandDismissed(true) }}
+              className="flex-1 text-sm text-slate-400 hover:text-slate-200 border border-slate-700 hover:border-slate-600 rounded-lg py-2 transition-colors"
+            >
+              不采用
+            </button>
+            <button
+              onClick={handleAcceptExpansion}
+              className="flex-1 flex items-center justify-center gap-2 text-sm bg-brand-600 hover:bg-brand-500 text-white rounded-lg py-2 font-medium transition-colors"
+            >
+              <Check size={14} />采用建议
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 主内容 */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden mb-6">
@@ -292,6 +411,32 @@ export function IdeaDetailPage() {
             </div>
             <div className="text-xs text-slate-500 leading-relaxed">
               {idea.productPlan ? '已生成功能列表、技术栈等方案' : idea.productShape ? '功能规划、技术选型、开发路线' : '请先完成产品形态分析'}
+            </div>
+          </div>
+          <ChevronRight size={16} className="text-slate-600 group-hover:text-slate-400 transition-colors" />
+        </Link>
+
+        <Link
+          to={`/idea/${id}/webpage`}
+          className={`group flex items-center gap-4 bg-slate-900 border rounded-xl p-5 transition-all sm:col-span-2 ${
+            idea.productPlan
+              ? 'border-slate-800 hover:border-brand-700/60'
+              : 'border-slate-800/50 opacity-60 cursor-not-allowed pointer-events-none'
+          }`}
+        >
+          <div className="w-12 h-12 rounded-xl bg-brand-900/30 border border-brand-800/40 flex items-center justify-center shrink-0 group-hover:bg-brand-900/50 transition-colors">
+            <Globe size={22} className="text-brand-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-white text-sm mb-1">
+              {idea.generatedPage ? `查看生成网页（v${idea.generatedPage.version}）` : '生成落地页网页'}
+            </div>
+            <div className="text-xs text-slate-500 leading-relaxed">
+              {idea.generatedPage
+                ? '已生成网页，可预览或重新生成'
+                : idea.productPlan
+                  ? 'AI 根据产品方案生成完整落地页，可预览并下载 HTML'
+                  : '请先完成产品方案生成'}
             </div>
           </div>
           <ChevronRight size={16} className="text-slate-600 group-hover:text-slate-400 transition-colors" />

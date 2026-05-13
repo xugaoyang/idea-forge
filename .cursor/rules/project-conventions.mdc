@@ -1,0 +1,44 @@
+---
+description: IdeaForge 项目整体规范——技术栈、数据流、路由约定
+alwaysApply: true
+---
+
+# IdeaForge 项目规范
+
+## 技术栈约束
+
+- UI：React 19 + TypeScript，函数式组件，禁止 class 组件
+- 样式：Tailwind 4，暗色主题，**禁止内联 style 写颜色**，统一用 `slate-*` / `brand-*` / 语义色
+- 状态：Zustand 5，所有持久化数据走 `persist`，存 `localStorage`
+- 路由：React Router 7，页面级组件放 `src/pages/`
+- 图标：仅用 `lucide-react`，禁止引入其他图标库
+
+## 数据流规则
+
+```
+UI 组件 → useIdeaStore / useSettingsStore → aiService → 更新 store
+```
+
+- **不允许在组件内直接操作 localStorage**，统一通过 store
+- AI 调用统一走 `src/services/aiService.ts`，不在组件内直接 `fetch`
+- 所有异步操作必须处理 loading / error 两种状态
+
+## 路由约定
+
+| 路由 | 页面 | 说明 |
+|------|------|------|
+| `/` | HomePage | 想法列表 |
+| `/idea/:id` | IdeaDetailPage | 详情与四步进度 |
+| `/idea/:id/shape` | ProductShapePage | 产品形态 |
+| `/idea/:id/plan` | ProductPlanPage | 产品方案 |
+| `/idea/:id/webpage` | WebpageGeneratePage | 网页生成（待建） |
+| `/settings` | SettingsPage | AI 配置 |
+
+## 暗色主题色值约定
+
+```
+背景层级：bg-slate-950（最底）→ bg-slate-900（卡片）→ bg-slate-800（输入框）
+边框：border-slate-800（默认）/ border-slate-700（hover/focus）
+文字：text-white（标题）/ text-slate-300（正文）/ text-slate-400~500（次要/说明）
+品牌色：brand-400（图标/强调）/ brand-500（hover）/ brand-600（按钮背景）
+```
