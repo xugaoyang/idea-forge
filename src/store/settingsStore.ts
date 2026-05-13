@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { AISettings, AIProvider } from '../types/ai'
+import type { AISettings } from '../types/ai'
 
 interface SettingsStore {
   aiSettings: AISettings
