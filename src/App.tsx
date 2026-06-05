@@ -11,9 +11,13 @@ import { AuthPage } from './pages/AuthPage'
 import { useAuthStore } from './store/authStore'
 import { useIdeaStore } from './store/ideaStore'
 import { isSupabaseConfigured } from './lib/supabase'
+import { REVIEW_MODE } from './config/site'
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, initialized } = useAuthStore()
+
+  // 公安审核期间临时开放访问
+  if (REVIEW_MODE) return <>{children}</>
 
   // Supabase 未配置时放行（本地模式）
   if (!isSupabaseConfigured()) return <>{children}</>
@@ -49,8 +53,8 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* 已登录时访问 /auth 直接跳首页 */}
-      <Route path="/auth" element={user ? <Navigate to="/" replace /> : <AuthPage />} />
+      {/* 审核模式或已登录时访问 /auth 直接跳首页 */}
+      <Route path="/auth" element={REVIEW_MODE || user ? <Navigate to="/" replace /> : <AuthPage />} />
       <Route
         path="/*"
         element={

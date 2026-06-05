@@ -4,6 +4,7 @@ import { useSettingsStore } from '../store/settingsStore'
 import { useAuthStore } from '../store/authStore'
 import { useIdeaStore } from '../store/ideaStore'
 import { isSupabaseConfigured } from '../lib/supabase'
+import { ICP_LINK, ICP_NUMBER } from '../config/site'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -112,8 +113,8 @@ export function Layout({ children }: LayoutProps) {
         {children}
       </main>
 
-      <footer className="border-t border-slate-800 py-4 text-center text-slate-600 text-xs">
-        <div className="flex items-center justify-center gap-2">
+      <footer className="border-t border-slate-800 py-4 text-center text-slate-600 text-xs space-y-1.5">
+        <div className="flex items-center justify-center gap-2 flex-wrap">
           <Layers size={12} />
           <span>IdeaForge · 把你的想法锻造成产品</span>
           {isConfigured() && (
@@ -121,6 +122,16 @@ export function Layout({ children }: LayoutProps) {
               <CheckCircle size={11} />AI 已就绪
             </span>
           )}
+        </div>
+        <div>
+          <a
+            href={ICP_LINK}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-slate-500 hover:text-slate-400 transition-colors"
+          >
+            {ICP_NUMBER}
+          </a>
         </div>
       </footer>
     </div>
